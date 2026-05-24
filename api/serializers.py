@@ -2,52 +2,85 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.models import User
 from .models import Programme, Teacher, Student, Assignment, Task, Quiz
+from rest_framework import serializers=
 
-
-# 1. Custom Login Serializer
 class CustomLoginSerializer(TokenObtainPairSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Remove default username and add our 3 fields
-        self.fields['username'] = None 
-        self.fields['student_id'] = serializers.CharField()
-        self.fields['full_name'] = serializers.CharField()
-        self.fields['password'] = serializers.CharField()
+        
+        # 1. Make all identity fields optional so DRF doesn't block the request early
+        self.fields['username'] = serializers.CharField(required=False)
+        self.fields['student_id'] = serializers.CharField(required=False)
+        self.fields['full_name'] = serializers.CharField(required=False)
+        # Password remains required by default from the parent class
 
     def validate(self, attrs):
-        student_id = attrs.get('student_id', '').strip().upper()
         password = attrs.get('password')
         
-        # 1. Get the submitted full name, make it UPPERCASE, and remove extra spaces
-        raw_full_name = attrs.get('full_name', '')
-        submitted_name = " ".join(raw_full_name.split()).upper()
+        # ==========================================
+        # FLOW 1: TEACHER LOGIN (uses username)
+        # ==========================================
+        if 'username' in attrs and attrs['username'].strip():
+            username = attrs.get('username')
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                raise serializers.ValidationError({"detail": "Invalid username or password."})
+            
+            # Check password
+            if not user.check_password(password):
+                raise serializers.ValidationError({"detail": "Incorrect password."})
+                
+            # Ensure this is actually a teacher
+            if not hasattr(user, 'teacher'):
+                raise serializers.ValidationError({"detail": "This account is not a teacher account."})
 
-        # 2. Find user by Student ID
-        try:
-            user = User.objects.get(username=student_id)
-        except User.DoesNotExist:
-            raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
+        # ==========================================
+        # FLOW 2: STUDENT LOGIN (uses student_id + full_name)
+        # ==========================================
+        elif 'student_id' in attrs and 'full_name' in attrs:
+            student_id = attrs.get('student_id', '').strip().upper()
+            raw_full_name = attrs.get('full_name', '')
+            submitted_name = " ".join(raw_full_name.split()).upper()
 
-        # 3. Glue the database First Name and Last Name together and make it UPPERCASE
-        raw_db_name = f"{user.first_name} {user.last_name}"
-        db_name = " ".join(raw_db_name.split()).upper()
+            # Find user by Student ID
+            try:
+                user = User.objects.get(username=student_id)
+            except User.DoesNotExist:
+                raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
 
-        # 4. Compare the two names
-        if submitted_name != db_name:
-            raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
+            # Glue and compare names
+            raw_db_name = f"{user.first_name} {user.last_name}"
+            db_name = " ".join(raw_db_name.split()).upper()
 
-        # 5. Check Password
-        if not user.check_password(password):
-            raise serializers.ValidationError({"detail": "Incorrect password."})
+            if submitted_name != db_name:
+                raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
 
-        # 6. Generate the JWT tokens
+            # Check password
+            if not user.check_password(password):
+                raise serializers.ValidationError({"detail": "Incorrect password."})
+                
+            # Ensure this is actually a student
+            if not hasattr(user, 'student_profile'):
+                raise serializers.ValidationError({"detail": "This account is not a student account."})
+
+        # ==========================================
+        # FLOW 3: INVALID PAYLOAD
+        # ==========================================
+        else:
+            raise serializers.ValidationError({
+                "detail": "Must provide either teacher username or student credentials."
+            })
+
+        # ==========================================
+        # GENERATE TOKENS AND RESPONSE DATA
+        # ==========================================
         refresh = self.get_token(user)
         data = {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
         }
 
-        # 7. Tell the frontend if the user MUST change their password
         if hasattr(user, 'student_profile'):
             data['role'] = 'student'
             data['require_password_change'] = not user.student_profile.has_changed_password
@@ -56,6 +89,7 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
             data['require_password_change'] = False
 
         return data
+
 
 # 2. Password Change Serializer
 class ChangePasswordSerializer(serializers.Serializer):
