@@ -2,7 +2,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.models import User
 from .models import Programme, Teacher, Student, Assignment, Task, Quiz
-from rest_framework import serializers=
+from rest_framework import serializers
 
 class CustomLoginSerializer(TokenObtainPairSerializer):
     def __init__(self, *args, **kwargs):
