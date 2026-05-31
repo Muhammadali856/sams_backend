@@ -79,6 +79,8 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
         data = {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
+            'user_id': user.student_profile.id if hasattr(user, 'student_profile') else user.teacher.id, # <--- NEW: Send the exact DB ID
+            'username': user.username, # <--- NEW: Send the student/teacher ID string
         }
 
         if hasattr(user, 'student_profile'):
