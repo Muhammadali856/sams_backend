@@ -6,7 +6,7 @@ from .serializers import AssignmentSerializer, TaskSerializer
 from .serializers import StudentSerializer, RegisterStudentSerializer, SubjectSerializer, QuizSerializer
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomLoginSerializer, ChangePasswordSerializer, studentProfileSettingsSerializer
+from .serializers import CustomLoginSerializer, ChangePasswordSerializer, StudentProfileSettingsSerializer
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
