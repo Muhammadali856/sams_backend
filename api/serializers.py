@@ -35,62 +35,42 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
             if not hasattr(user, 'teacher'):
                 raise serializers.ValidationError({"detail": "This account is not a teacher account."})
 
+       # ==========================================
+        # FLOW 2 & 3: STUDENT LOGIN
         # ==========================================
-        # FLOW 2: STUDENT LOGIN (uses student_id + full_name)
-        # ==========================================
-        elif 'student_id' in attrs and 'full_name' in attrs:
+        elif 'student_id' in attrs:
             student_id = attrs.get('student_id', '').strip().upper()
-            raw_full_name = attrs.get('full_name', '')
-            submitted_name = " ".join(raw_full_name.split()).upper()
 
-            # Find user by Student ID
+            # 1. Find user by Student ID
             try:
                 user = User.objects.get(username=student_id)
             except User.DoesNotExist:
-                raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
+                raise serializers.ValidationError({"detail": "Invalid Student ID or password."})
 
-            # Glue and compare names
-            raw_db_name = f"{user.first_name} {user.last_name}"
-            db_name = " ".join(raw_db_name.split()).upper()
-
-            if submitted_name != db_name:
-                raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
-
-            # Check password
+            # 2. Check Password
             if not user.check_password(password):
                 raise serializers.ValidationError({"detail": "Incorrect password."})
                 
-            # Ensure this is actually a student
+            # 3. Ensure this is actually a student
             if not hasattr(user, 'student_profile'):
                 raise serializers.ValidationError({"detail": "This account is not a student account."})
 
-        # ==========================================
-        # FLOW 3: INVALID PAYLOAD
-        # ==========================================
-        else:
-            raise serializers.ValidationError({
-                "detail": "Must provide either teacher username or student credentials."
-            })
+            # 4. FIRST TIME LOGIN CHECK: Only require Full Name if they haven't changed the default password
+            if not user.student_profile.has_changed_password:
+                if 'full_name' not in attrs or not attrs['full_name'].strip():
+                    raise serializers.ValidationError({
+                        "detail": "This is your first time logging in. Please click 'First time?' to verify your full name.",
+                        "first_time_required": True 
+                    })
+                
+                # Verify the provided Full Name matches the database
+                raw_full_name = attrs.get('full_name', '')
+                submitted_name = " ".join(raw_full_name.split()).upper()
+                raw_db_name = f"{user.first_name} {user.last_name}"
+                db_name = " ".join(raw_db_name.split()).upper()
 
-        # ==========================================
-        # GENERATE TOKENS AND RESPONSE DATA
-        # ==========================================
-        refresh = self.get_token(user)
-        data = {
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-            'user_id': user.student_profile.id if hasattr(user, 'student_profile') else user.teacher.id, # <--- NEW: Send the exact DB ID
-            'username': user.username, # <--- NEW: Send the student/teacher ID string
-        }
-
-        if hasattr(user, 'student_profile'):
-            data['role'] = 'student'
-            data['require_password_change'] = not user.student_profile.has_changed_password
-        elif hasattr(user, 'teacher'):
-            data['role'] = 'teacher'
-            data['require_password_change'] = False
-
-        return data
+                if submitted_name != db_name:
+                    raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
 
 
 # 2. Password Change Serializer
