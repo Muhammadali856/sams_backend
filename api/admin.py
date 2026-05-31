@@ -1,8 +1,8 @@
 from django.contrib import admin
-from .models import Programme, Teacher, Student, Assignment, Task, Quiz
+from .models import Subject, Teacher, Student, Assignment, Task, Quiz
 
-@admin.register(Programme)
-class ProgrammeAdmin(admin.ModelAdmin):
+@admin.register(Subject)
+class SubjectAdmin(admin.ModelAdmin):
     list_display = ('id', 'name')
     search_fields = ('name',)
 
@@ -13,20 +13,20 @@ class TeacherAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'display_programmes', 'is_active')
+    list_display = ('id', 'user', 'display_subjects', 'is_active')
     
-    list_filter = ('programmes', 'is_active')
+    list_filter = ('subjects', 'is_active')
     search_fields = ('user__username', 'user__first_name')
-    def display_programmes(self, obj):
-        return ", ".join([p.name for p in obj.programmes.all()])
-    display_programmes.short_description = 'Programmes'
+    def display_subjects(self, obj):
+        return ", ".join([s.name for s in obj.subjects.all()])
+    display_subjects.short_description = 'Subjects'
 
 @admin.register(Assignment)
 class AssignmentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'programme', 'deadline')
-    
-    list_filter = ('programme',)
-    
+    list_display = ('id', 'name', 'subject', 'deadline')
+
+    list_filter = ('subject',)
+
     search_fields = ('name',)
     ordering = ('-created_at',)
 
@@ -39,6 +39,6 @@ class TaskAdmin(admin.ModelAdmin):
 
 @admin.register(Quiz)
 class QuizAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'programme')
-    list_filter = ('programme',)
+    list_display = ('id', 'name', 'subject')
+    list_filter = ('subject',)
     search_fields = ('name',)

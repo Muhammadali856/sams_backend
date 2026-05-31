@@ -1,12 +1,12 @@
 from rest_framework import viewsets, generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .models import Programme, Assignment, Task, Student, Teacher, Quiz
+from .models import Subject, Assignment, Task, Student, Teacher, Quiz
 from .serializers import AssignmentSerializer, TaskSerializer
-from .serializers import StudentSerializer, RegisterStudentSerializer, ProgrammeSerializer, QuizSerializer
+from .serializers import StudentSerializer, RegisterStudentSerializer, SubjectSerializer, QuizSerializer
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomLoginSerializer, ChangePasswordSerializer
+from .serializers import CustomLoginSerializer, ChangePasswordSerializer, studentProfileSettingsSerializer
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
@@ -56,19 +56,14 @@ class StudentSignUpView(generics.CreateAPIView):
 # 2. Assignment (Vazifalar) uchun CRUD API
 class AssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = AssignmentSerializer
-    # Ham tizimga kirgan bo'lishi shart, ham bizning maxsus ruxsatnomadan o'tishi shart
     permission_classes = [IsAuthenticated, IsTeacherOrReadOnly]
 
     def get_queryset(self):
         user = self.request.user
-        
         if hasattr(user, 'teacher'):
             return Assignment.objects.all()
-            
         elif hasattr(user, 'student_profile'):
-            # Use __in to fetch assignments from ALL enrolled programmes
-            return Assignment.objects.filter(programme__in=user.student_profile.programmes.all())
-            
+            return Assignment.objects.filter(subject__in=user.student_profile.subjects.all())
         return Assignment.objects.none()
 
 # 3. Task (Shaxsiy topshiriqlar) uchun CRUD API
@@ -84,9 +79,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Yaratishda ham faqat User ning o'zini saqlaymiz
         serializer.save(student=self.request.user)
 
-class ProgrammeViewSet(viewsets.ModelViewSet):
-    queryset = Programme.objects.all()
-    serializer_class = ProgrammeSerializer
+class SubjectViewSet(viewsets.ModelViewSet):
+    queryset = Subject.objects.all()
+    serializer_class = SubjectSerializer
 
     def get_permissions(self):
         if self.request.method == 'GET':
@@ -98,28 +93,24 @@ class StudentViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
 
-class UpdateStudentProgrammesView(APIView):
+class UpdateStudentSubjectsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request):
         user = request.user
-        
-        # Make sure the user is actually a student
         if not hasattr(user, 'student_profile'):
-            return Response({"error": "Only students can update programmes."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "Only students can update subjects."}, status=status.HTTP_403_FORBIDDEN)
             
         student = user.student_profile
-        new_programme_ids = request.data.get('programme_ids', [])
+        new_subject_ids = request.data.get('subject_ids', [])
         
-        # Enforce your maximum 6 rule here again
-        if len(new_programme_ids) > 6 or len(new_programme_ids) == 0:
-            return Response({"error": "Must select between 1 and 6 programmes."}, status=status.HTTP_400_BAD_REQUEST)
+        if len(new_subject_ids) > 6 or len(new_subject_ids) == 0:
+            return Response({"error": "Must select between 1 and 6 subjects."}, status=status.HTTP_400_BAD_REQUEST)
             
-        # Update the many-to-many relationship
-        programmes = Programme.objects.filter(id__in=new_programme_ids)
-        student.programmes.set(programmes)
+        subjects = Subject.objects.filter(id__in=new_subject_ids)
+        student.subjects.set(subjects)
         
-        return Response({"message": "Programmes updated successfully!"}, status=status.HTTP_200_OK)
+        return Response({"message": "Subjects updated successfully!"}, status=status.HTTP_200_OK)
 
 class QuizViewSet(viewsets.ModelViewSet):
     serializer_class = QuizSerializer
@@ -127,13 +118,50 @@ class QuizViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        
-        # Teachers see all quizzes
         if hasattr(user, 'teacher'):
             return Quiz.objects.all()
-            
-        # Students see quizzes for their enrolled programmes
         elif hasattr(user, 'student_profile'):
-            return Quiz.objects.filter(programme__in=user.student_profile.programmes.all())
-            
+            return Quiz.objects.filter(subject__in=user.student_profile.subjects.all())
         return Quiz.objects.none()
+
+# ---------------------------------------------------------
+# NEW PROFILE SETTINGS VIEW (Replaces UpdateStudentSubjectsView)
+# ---------------------------------------------------------
+class StudentProfileSettingsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            student = Student.objects.get(pk=pk)
+        except Student.DoesNotExist:
+            return Response({"error": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = StudentProfileSettingsSerializer(student)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        try:
+            student = Student.objects.get(pk=pk)
+        except Student.DoesNotExist:
+            return Response({"error": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Basic security: Ensure the logged-in student is updating their own profile
+        if not hasattr(request.user, 'student_profile') or request.user.student_profile.id != student.id:
+            return Response({"error": "You do not have permission to edit this profile."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Handle updating subjects if they were provided in the request
+        new_subject_ids = request.data.get('subject_ids')
+        
+        if new_subject_ids is not None:
+            if len(new_subject_ids) > 6 or len(new_subject_ids) == 0:
+                return Response({"error": "Must select between 1 and 6 subjects."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            subjects = Subject.objects.filter(id__in=new_subject_ids)
+            student.subjects.set(subjects)
+
+        # Return the freshly updated profile data back to the frontend
+        serializer = StudentProfileSettingsSerializer(student)
+        return Response({
+            "message": "Profile updated successfully!",
+            "profile": serializer.data
+        }, status=status.HTTP_200_OK)

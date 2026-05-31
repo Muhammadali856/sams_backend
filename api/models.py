@@ -1,8 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-# 1. Programmes (Dasturlar) jadvali
-class Programme(models.Model):
+# 1. Subjects (Fanlar) jadvali
+class Subject(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(null=True, blank=True)
     
@@ -20,7 +20,7 @@ class Teacher(models.Model):
 # 3. Student (Talabalar profili) jadvali
 class Student(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
-    programmes = models.ManyToManyField(Programme, related_name='students')
+    subjects = models.ManyToManyField(Subject, related_name='students')
     is_active = models.BooleanField(default=True)
     
     has_changed_password = models.BooleanField(default=False)
@@ -30,7 +30,7 @@ class Student(models.Model):
 
 # 4. Assignment (Vazifalar) jadvali
 class Assignment(models.Model):
-    programme = models.ForeignKey(Programme, on_delete=models.CASCADE, related_name='assignments')
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='assignments')
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     deadline = models.DateTimeField()
@@ -56,9 +56,9 @@ class Task(models.Model):
     def __str__(self):
         return f"{self.name} - {self.get_status_display()}"
 
-# Add this below your Assignment model
+# 6 Quizzes (quizlar) jadvali
 class Quiz(models.Model):
-    programme = models.ForeignKey(Programme, on_delete=models.CASCADE, related_name='quizzes')
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='quizzes')
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     deadline = models.DateTimeField()

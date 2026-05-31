@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.models import User
-from .models import Programme, Teacher, Student, Assignment, Task, Quiz
+from .models import Subject, Teacher, Student, Assignment, Task, Quiz
 from rest_framework import serializers
 
 class CustomLoginSerializer(TokenObtainPairSerializer):
@@ -101,10 +101,10 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'email']
 
-# Dasturlar (Yo'nalishlar) uchun serializer
-class ProgrammeSerializer(serializers.ModelSerializer):
+# Fanlar (subjects) uchun serializer
+class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Programme
+        model = Subject
         fields = '__all__'
 
 # O'qituvchilar profilini to'liq ko'rsatish uchun serializer
@@ -119,62 +119,56 @@ class TeacherSerializer(serializers.ModelSerializer):
 class StudentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     
-    # This magic line grabs the 'name' of EVERY programme the student is in
-    programme_names = serializers.SlugRelatedField(
+    subject_names = serializers.SlugRelatedField(
         many=True,
         read_only=True,
         slug_field='name',
-        source='programmes'
+        source='subjects'
     )
     
     class Meta:
         model = Student
-        # We use 'programmes' (plural) to match the new model field name
-        fields = ['id', 'user', 'programmes', 'programme_names', 'is_active']
+        fields = ['id', 'user', 'subjects', 'subject_names', 'is_active']
 
-# Talaba ro'yxatdan o'tayotganda ham User, ham Student profilini birga yaratish uchun
+# Talaba ro'yxatdan o'tayotganda
 class RegisterStudentSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
-    # Changed to ListField to accept an array like [1, 2, 4]
-    programme_ids = serializers.ListField(
+    subject_ids = serializers.ListField(
         child=serializers.IntegerField(), write_only=True
     )
     student_id = serializers.CharField(source='username') 
 
     class Meta:
         model = User
-        fields = ['student_id', 'password', 'first_name', 'last_name', 'email', 'programme_ids']
+        fields = ['student_id', 'password', 'first_name', 'last_name', 'email', 'subject_ids']
 
-    # This built-in method automatically validates the programme_ids array
-    def validate_programme_ids(self, value):
+    def validate_subject_ids(self, value):
         if len(value) > 6:
-            raise serializers.ValidationError("A student can only choose up to 6 programmes.")
+            raise serializers.ValidationError("A student can only choose up to 6 subjects.")
         if len(value) == 0:
-            raise serializers.ValidationError("A student must choose at least 1 programme.")
+            raise serializers.ValidationError("A student must choose at least 1 subject.")
         return value
 
     def create(self, validated_data):
         password = validated_data.pop('password')
-        programme_ids = validated_data.pop('programme_ids')
+        subject_ids = validated_data.pop('subject_ids')
         
         user = User.objects.create(**validated_data)
         user.set_password(password)
         user.save()
 
-        # Create the student profile first
         student = Student.objects.create(user=user)
         
-        # Fetch the selected programmes from the database and link them to the student
-        programmes = Programme.objects.filter(id__in=programme_ids)
-        student.programmes.set(programmes)
+        subjects = Subject.objects.filter(id__in=subject_ids)
+        student.subjects.set(subjects)
 
         return user
+
 # Vazifalar uchun serializer
 class AssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assignment
-        # student va status ni bu yerdan butunlay olib tashlaymiz:
-        fields = ['id', 'programme', 'name', 'description', 'deadline', 'created_at'] 
+        fields = ['id', 'subject', 'name', 'description', 'deadline', 'created_at'] 
 
 # Shaxsiy tasklar uchun serializer
 class TaskSerializer(serializers.ModelSerializer):
@@ -188,4 +182,33 @@ class TaskSerializer(serializers.ModelSerializer):
 class QuizSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quiz
-        fields = ['id', 'programme', 'name', 'description', 'deadline', 'created_at']
+        fields = ['id', 'subject', 'name', 'description', 'deadline', 'created_at']
+
+class StudentProfileSettingsSerializer(serializers.ModelSerializer):
+    # Read-only fields pulled from the related User model
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    
+    # Read-only list of subject names for display
+    subject_names = serializers.SlugRelatedField(
+        many=True, read_only=True, slug_field='name', source='subjects'
+    )
+    
+    # Write-only field for updating subjects
+    subject_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
+
+    class Meta:
+        model = Student
+        fields = [
+            'id', 
+            'first_name', 
+            'last_name', 
+            'email', 
+            'subjects', 
+            'subject_names', 
+            'has_changed_password', 
+            'subject_ids'
+        ]
