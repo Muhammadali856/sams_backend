@@ -4,21 +4,21 @@ from django.contrib.auth.models import User
 from .models import Subject, Teacher, Student, Assignment, Task, Quiz
 from rest_framework import serializers
 
+# 1. Custom Login Serializer
 class CustomLoginSerializer(TokenObtainPairSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # 1. Make all identity fields optional so DRF doesn't block the request early
+        # Make all identity fields optional so DRF doesn't block the request early
         self.fields['username'] = serializers.CharField(required=False)
         self.fields['student_id'] = serializers.CharField(required=False)
         self.fields['full_name'] = serializers.CharField(required=False)
-        # Password remains required by default from the parent class
 
     def validate(self, attrs):
         password = attrs.get('password')
         
         # ==========================================
-        # FLOW 1: TEACHER LOGIN (uses username)
+        # FLOW 1: TEACHER LOGIN
         # ==========================================
         if 'username' in attrs and attrs['username'].strip():
             username = attrs.get('username')
@@ -27,16 +27,14 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
             except User.DoesNotExist:
                 raise serializers.ValidationError({"detail": "Invalid username or password."})
             
-            # Check password
             if not user.check_password(password):
                 raise serializers.ValidationError({"detail": "Incorrect password."})
                 
-            # Ensure this is actually a teacher
             if not hasattr(user, 'teacher'):
                 raise serializers.ValidationError({"detail": "This account is not a teacher account."})
 
-       # ==========================================
-        # FLOW 2 & 3: STUDENT LOGIN
+        # ==========================================
+        # FLOW 2: STUDENT LOGIN
         # ==========================================
         elif 'student_id' in attrs:
             student_id = attrs.get('student_id', '').strip().upper()
@@ -55,11 +53,11 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
             if not hasattr(user, 'student_profile'):
                 raise serializers.ValidationError({"detail": "This account is not a student account."})
 
-            # 4. FIRST TIME LOGIN CHECK: Only require Full Name if they haven't changed the default password
+            # 4. FIRST TIME LOGIN CHECK: Require Full Name if default password hasn't been changed
             if not user.student_profile.has_changed_password:
                 if 'full_name' not in attrs or not attrs['full_name'].strip():
                     raise serializers.ValidationError({
-                        "detail": "This is your first time logging in. Please click 'First time?' to verify your full name.",
+                        "detail": "This is your first time logging in. Please click 'First time logging in?' to verify your full name.",
                         "first_time_required": True 
                     })
                 
@@ -71,6 +69,34 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
 
                 if submitted_name != db_name:
                     raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
+
+        # ==========================================
+        # FLOW 3: INVALID PAYLOAD
+        # ==========================================
+        else:
+            raise serializers.ValidationError({
+                "detail": "Must provide either teacher username or student credentials."
+            })
+
+        # ==========================================
+        # GENERATE TOKENS AND RESPONSE DATA
+        # ==========================================
+        refresh = self.get_token(user)
+        data = {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'user_id': user.student_profile.id if hasattr(user, 'student_profile') else user.teacher.id,
+            'username': user.username,
+        }
+
+        if hasattr(user, 'student_profile'):
+            data['role'] = 'student'
+            data['require_password_change'] = not user.student_profile.has_changed_password
+        elif hasattr(user, 'teacher'):
+            data['role'] = 'teacher'
+            data['require_password_change'] = False
+
+        return data  # <--- THIS is the crucial line that was missing!
 
 
 # 2. Password Change Serializer
