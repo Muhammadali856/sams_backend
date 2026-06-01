@@ -7,6 +7,7 @@ from .serializers import StudentSerializer, RegisterStudentSerializer, SubjectSe
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomLoginSerializer, ChangePasswordSerializer, StudentProfileSettingsSerializer
+from rest_framework.decorators import action
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
@@ -87,6 +88,26 @@ class SubjectViewSet(viewsets.ModelViewSet):
         if self.request.method == 'GET':
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
+
+    @action(detail=True, methods=['post'])
+    def enroll(self, request, pk=None):
+        subject = self.get_object()
+        user = request.user
+
+        # 1. Check the enrollment key
+        provided_key = request.data.get('enrollment_key', '')
+        if provided_key != subject.enrollment_key:
+            return Response({"error": "Invalid enrollment key."}, status=status.HTTP_400_BAD_REQUEST)
+
+        student = user.student_profile
+
+        # 2. Check the 6-subject limit (unless they are already enrolled)
+        if student.subjects.count() >= 6 and not student.subjects.filter(id=subject.id).exists():
+            return Response({"error": "You can only select a maximum of 6 subjects."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Success! Add the subject to the student
+        student.subjects.add(subject)
+        return Response({"message": f"Successfully enrolled in {subject.name}!"}, status=status.HTTP_200_OK)
 
 class StudentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Student.objects.all()

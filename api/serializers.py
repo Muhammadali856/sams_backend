@@ -113,7 +113,11 @@ class UserSerializer(serializers.ModelSerializer):
 class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
-        fields = '__all__'
+        fields = ['id', 'name', 'description', 'enrollment_key'] 
+        
+        extra_kwargs = {
+            'enrollment_key': {'write_only': True} 
+        }
 
 # O'qituvchilar profilini to'liq ko'rsatish uchun serializer
 class TeacherSerializer(serializers.ModelSerializer):

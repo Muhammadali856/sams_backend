@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 class Subject(models.Model):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(null=True, blank=True)
+    enrollment_key = models.CharField(max_length=50)
     
     def __str__(self):
         return self.name
