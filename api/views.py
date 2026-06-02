@@ -8,6 +8,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomLoginSerializer, ChangePasswordSerializer, StudentProfileSettingsSerializer
 from rest_framework.decorators import action, api_view, permission_classes
+from django.contrib.auth.models import User
+from django.db import transaction
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
