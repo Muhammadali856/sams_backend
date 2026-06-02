@@ -1,4 +1,4 @@
-from rest_framework import viewsets, generics, status, permissions
+from rest_framework import viewsets, generics, status, permissions, api_view
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from .models import Subject, Assignment, Task, Student, Teacher, Quiz
