@@ -1,4 +1,4 @@
-from rest_framework import viewsets, generics, status, permissions, api_view
+from rest_framework import viewsets, generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from .models import Subject, Assignment, Task, Student, Teacher, Quiz
@@ -7,7 +7,7 @@ from .serializers import StudentSerializer, RegisterStudentSerializer, SubjectSe
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomLoginSerializer, ChangePasswordSerializer, StudentProfileSettingsSerializer
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
