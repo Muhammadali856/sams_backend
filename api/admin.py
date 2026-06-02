@@ -8,8 +8,9 @@ class SubjectAdmin(admin.ModelAdmin):
 
 @admin.register(Teacher)
 class TeacherAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'is_active')
-    list_filter = ('is_active',)
+    list_display = ('user', 'is_head_teacher')
+    list_editable = ('is_head_teacher',)
+    list_filter = ("is_active",)
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):

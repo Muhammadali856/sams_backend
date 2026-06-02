@@ -186,3 +186,47 @@ class StudentProfileSettingsView(APIView):
             "message": "Profile updated successfully!",
             "profile": serializer.data
         }, status=status.HTTP_200_OK)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_staff_teacher(request):
+    user = request.user
+
+    # 1. SECURITY WALL: Check if the user is a teacher AND has the Head Teacher switch set to True
+    if not hasattr(user, 'teacher_profile') or not user.teacher_profile.is_head_teacher:
+        return Response(
+            {"error": "Access Denied. Only Head Teachers can create new staff accounts."}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # 2. Grab the data sent from React
+    data = request.data
+    username = data.get('username')
+    password = data.get('password')
+    first_name = data.get('first_name', '')
+    last_name = data.get('last_name', '')
+    email = data.get('email', '')
+
+    if not username or not password:
+        return Response({"error": "Username and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(username=username).exists():
+        return Response({"error": "That Student ID / Username is already taken."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 3. Securely create both records in the database
+    try:
+        with transaction.atomic():
+            new_user = User.objects.create_user(
+                username=username,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+                email=email
+            )
+            # Link the new user to a teacher profile (defaulting to standard teacher)
+            Teacher.objects.create(user=new_user, is_head_teacher=False)
+            
+        return Response({"message": f"Successfully created teacher account for {first_name} {last_name}!"}, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

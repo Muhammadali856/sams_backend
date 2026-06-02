@@ -14,9 +14,10 @@ class Subject(models.Model):
 class Teacher(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     is_active = models.BooleanField(default=True)
+    is_head_teacher = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.user.first_name} {self.user.last_name}"
+        return f"{self.user.first_name} {self.user.last_name} - {'Head Teacher' if self.is_head_teacher else 'Teacher'}"
 
 # 3. Student (Talabalar profili) jadvali
 class Student(models.Model):

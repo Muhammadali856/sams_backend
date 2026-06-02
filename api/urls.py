@@ -23,4 +23,5 @@ urlpatterns = [
     path('auth/change-password/', ChangePasswordView.as_view(), name='change_password'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/profile/<int:pk>/', StudentProfileSettingsView.as_view(), name='profile-settings'),
+    path('teachers/create/', views.create_staff_teacher, name='create-staff-teacher'),
 ]
