@@ -95,6 +95,7 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
         elif hasattr(user, 'teacher'):
             data['role'] = 'teacher'
             data['require_password_change'] = False
+            data['is_head_teacher'] = user.teacher.is_head_teacher
 
         return data  # <--- THIS is the crucial line that was missing!
 

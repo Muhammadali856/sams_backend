@@ -193,7 +193,7 @@ def create_staff_teacher(request):
     user = request.user
 
     # 1. SECURITY WALL: Check if the user is a teacher AND has the Head Teacher switch set to True
-    if not hasattr(user, 'teacher_profile') or not user.teacher_profile.is_head_teacher:
+    if not hasattr(user, 'teacher') or not user.teacher.is_head_teacher:
         return Response(
             {"error": "Access Denied. Only Head Teachers can create new staff accounts."}, 
             status=status.HTTP_403_FORBIDDEN
