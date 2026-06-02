@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import AssignmentViewSet, TaskViewSet 
 from .views import UpdateStudentSubjectsView, SubjectViewSet, StudentViewSet, QuizViewSet
+from . import views
 
 # IMPORT OUR NEW VIEWS HERE:
 from .views import CustomLoginView, ChangePasswordView, StudentProfileSettingsView
