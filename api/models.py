@@ -33,6 +33,7 @@ class Student(models.Model):
 # 4. Assignment (Vazifalar) jadvali
 class Assignment(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='assignments')
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='assignments', null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     deadline = models.DateTimeField()
@@ -61,6 +62,7 @@ class Task(models.Model):
 # 6 Quizzes (quizlar) jadvali
 class Quiz(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='quizzes')
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='quizzes', null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     deadline = models.DateTimeField()

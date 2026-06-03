@@ -181,7 +181,8 @@ class RegisterStudentSerializer(serializers.ModelSerializer):
 class AssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assignment
-        fields = ['id', 'subject', 'name', 'description', 'deadline', 'created_at'] 
+        fields = ['id', 'subject', 'name', 'description', 'deadline', 'created_at', 'teacher'] 
+        read_only_fields = ['teacher', 'created_at']
 
 # Shaxsiy tasklar uchun serializer
 class TaskSerializer(serializers.ModelSerializer):
@@ -195,7 +196,8 @@ class TaskSerializer(serializers.ModelSerializer):
 class QuizSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quiz
-        fields = ['id', 'subject', 'name', 'description', 'deadline', 'created_at']
+        fields = ['id', 'subject', 'name', 'description', 'deadline', 'created_at', 'teacher']
+        read_only_fields = ['teacher', 'created_at']
 
 class StudentProfileSettingsSerializer(serializers.ModelSerializer):
     # Read-only fields pulled from the related User model

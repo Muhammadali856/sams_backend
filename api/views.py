@@ -64,10 +64,16 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, 'teacher'):
-            return Assignment.objects.all()
+            return Assignment.objects.filter(teacher=user.teacher)
         elif hasattr(user, 'student_profile'):
             return Assignment.objects.filter(subject__in=user.student_profile.subjects.all())
         return Assignment.objects.none()
+    
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'teacher'):
+            serializer.save(teacher=self.request.user.teacher)
+        else:
+            serializer.save()
 
 # 3. Task (Shaxsiy topshiriqlar) uchun CRUD API
 class TaskViewSet(viewsets.ModelViewSet):
@@ -142,10 +148,16 @@ class QuizViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, 'teacher'):
-            return Quiz.objects.all()
+            return Quiz.objects.filter(teacher=user.teacher)
         elif hasattr(user, 'student_profile'):
             return Quiz.objects.filter(subject__in=user.student_profile.subjects.all())
         return Quiz.objects.none()
+
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'teacher'):
+            serializer.save(teacher=self.request.user.teacher)
+        else:
+            serializer.save()
 
 # ---------------------------------------------------------
 # NEW PROFILE SETTINGS VIEW (Replaces UpdateStudentSubjectsView)
