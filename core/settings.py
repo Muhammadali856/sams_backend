@@ -1,6 +1,7 @@
 from pathlib import Path
 import dj_database_url
 from datetime import timedelta
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -121,5 +122,5 @@ EMAIL_HOST = 'smtp.office365.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'FIT2508130@xmu.edu.my' # Your university sending node
-EMAIL_HOST_PASSWORD = 'Frikabelki1209ya1209' # Your generated 16-character Microsoft App Password
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
