@@ -11,6 +11,11 @@ from rest_framework.decorators import action, api_view, permission_classes
 from django.contrib.auth.models import User
 from django.db import transaction
 import random
+from django.core.mail import send_mail
+from django.conf import settings
+from django.utils import timezone
+from datetime import timedelta
+
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
