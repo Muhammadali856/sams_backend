@@ -280,7 +280,7 @@ class RequestPasswordResetOTPView(APIView):
             # Bypass Render's SMTP block by printing to the server console
             print("\n" + "="*50)
             print(f"🚨 SAMS OTP SYSTEM 🚨")
-            print(f"To: {target_email}")
+            print(f"To: {user.email}")
             print(f"Code: {otp_code}")
             print("="*50 + "\n")
             return Response({"message": "Verification code sent to your Outlook email."}, status=status.HTTP_200_OK)
