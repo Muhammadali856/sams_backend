@@ -15,6 +15,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
+import resend
 
 
 # 1. View to handle our custom 3-field login
@@ -251,42 +252,35 @@ def create_staff_teacher(request):
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# STEP A: Request the 6-Digit Code
-class RequestPasswordResetOTPView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        student_id = request.data.get('student_id', '').strip().upper()
-        
-        try:
-            user = User.objects.get(username=student_id)
+# --- START RESEND API INTEGRATION ---
+            resend.api_key = os.environ.get('RESEND_API_KEY')
             
-            if not hasattr(user, 'student_profile'):
-                return Response({"error": "This recovery portal is for student accounts only."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # STAGE 3 SECURITY CHECK: Ensure they have logged in normally at least once
-            if not user.student_profile.has_changed_password:
+            try:
+                # Resend testing domain (onboarding@resend.dev) only sends to the account owner
+                resend.Emails.send({
+                    "from": "SAMS Portal <onboarding@resend.dev>",
+                    "to": user.email, # This will be fit2508130@xmu.edu.my
+                    "subject": "SAMS Password Reset Verification Code",
+                    "html": f"""
+                        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+                            <h2>SAMS Account Recovery</h2>
+                            <p>Hello {user.first_name},</p>
+                            <p>You requested a password reset code for the SAMS Portal.</p>
+                            <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                                <h1 style="color: #1e40af; margin: 0; letter-spacing: 5px;">{otp_code}</h1>
+                            </div>
+                            <p>This code will expire in 10 minutes.</p>
+                        </div>
+                    """
+                })
+            except Exception as e:
+                # If Resend crashes, we catch the error so the server doesn't throw a 500
+                print(f"Resend API Error: {e}")
                 return Response({
-                    "error": "Your account has not been activated yet. Please use the 'First time ?' button to complete your initial login."
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Generate random 6-digit string
-            otp_code = str(random.randint(100000, 999999))
-            
-            # Clean up any lingering old codes for this user
-            PasswordResetOTP.objects.filter(user=user).delete()
-            PasswordResetOTP.objects.create(user=user, otp_code=otp_code)
-            
-            # Bypass Render's SMTP block by printing to the server console
-            print("\n" + "="*50)
-            print(f"🚨 SAMS OTP SYSTEM 🚨")
-            print(f"To: {user.email}")
-            print(f"Code: {otp_code}")
-            print("="*50 + "\n")
-            return Response({"message": "Verification code sent to your Outlook email."}, status=status.HTTP_200_OK)
-            
-        except User.DoesNotExist:
-            # Standard cybersecurity mitigation: obfuscate response so attackers can't scrape valid IDs
+                    "error": "Failed to connect to the email server. Please try again later."
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # --- END RESEND API INTEGRATION ---
+
             return Response({"message": "Verification code sent to your Outlook email."}, status=status.HTTP_200_OK)
 
 
