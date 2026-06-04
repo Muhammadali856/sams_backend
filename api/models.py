@@ -70,3 +70,12 @@ class Quiz(models.Model):
 
     def __str__(self):
         return self.name
+
+class PasswordResetOTP(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        # The OTP code expires automatically after 10 minutes
+        return self.created_at >= timezone.now() - timedelta(minutes=10)

@@ -4,8 +4,8 @@ from .views import AssignmentViewSet, TaskViewSet
 from .views import UpdateStudentSubjectsView, SubjectViewSet, StudentViewSet, QuizViewSet
 from . import views
 
-# IMPORT OUR NEW VIEWS HERE:
 from .views import CustomLoginView, ChangePasswordView, StudentProfileSettingsView
+from .views import RequestPasswordResetOTPView, VerifyPasswordResetOTPView, ConfirmPasswordResetView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 router = DefaultRouter()
@@ -19,10 +19,12 @@ router.register(r'quizzes', QuizViewSet, basename='quiz')
 urlpatterns = [
     path('', include(router.urls)),
     
-    # WE DELETED SIGNUP AND REPLACED THE LOGIN URL:
     path('auth/login/', CustomLoginView.as_view(), name='custom_login'), 
     path('auth/change-password/', ChangePasswordView.as_view(), name='change_password'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/profile/<int:pk>/', StudentProfileSettingsView.as_view(), name='profile-settings'),
     path('teachers/create/', views.create_staff_teacher, name='create-staff-teacher'),
+    path('auth/forgot-password/request/', RequestPasswordResetOTPView.as_view(), name='fp-request'),
+    path('auth/forgot-password/verify/', VerifyPasswordResetOTPView.as_view(), name='fp-verify'),
+    path('auth/forgot-password/confirm/', ConfirmPasswordResetView.as_view(), name='fp-confirm'),
 ]

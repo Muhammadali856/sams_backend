@@ -115,3 +115,11 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.office365.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'FIT2508130@xmu.edu.my' # Your university sending node
+EMAIL_HOST_PASSWORD = 'Frikabelki1209ya1209' # Your generated 16-character Microsoft App Password
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

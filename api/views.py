@@ -244,3 +244,96 @@ def create_staff_teacher(request):
     
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# STEP A: Request the 6-Digit Code
+class RequestPasswordResetOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        student_id = request.data.get('student_id', '').strip().upper()
+        
+        try:
+            user = User.objects.get(username=student_id)
+            
+            if not hasattr(user, 'student_profile'):
+                return Response({"error": "This recovery portal is for student accounts only."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # STAGE 3 SECURITY CHECK: Ensure they have logged in normally at least once
+            if not user.student_profile.has_changed_password:
+                return Response({
+                    "error": "Your account has not been activated yet. Please use the 'First time ?' button to complete your initial login."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Generate random 6-digit string
+            otp_code = str(random.randint(100000, 999999))
+            
+            # Clean up any lingering old codes for this user
+            PasswordResetOTP.objects.filter(user=user).delete()
+            PasswordResetOTP.objects.create(user=user, otp_code=otp_code)
+            
+            # Fire the email through Xiamen Outlook SMTP servers
+            send_mail(
+                subject="SAMS Password Reset Verification Code",
+                message=f"Hello {user.first_name},\n\nYou requested a password reset code for SAMS.\n\nYour 6-digit verification code is: {otp_code}\n\nThis code will expire in 10 minutes.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+            return Response({"message": "Verification code sent to your Outlook email."}, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            # Standard cybersecurity mitigation: obfuscate response so attackers can't scrape valid IDs
+            return Response({"message": "Verification code sent to your Outlook email."}, status=status.HTTP_200_OK)
+
+
+# STEP B: Verify Only the 6-Digit Code (Unlocks the next screen on React)
+class VerifyPasswordResetOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        student_id = request.data.get('student_id', '').strip().upper()
+        otp_code = request.data.get('otp_code', '').strip()
+
+        try:
+            user = User.objects.get(username=student_id)
+            otp_record = PasswordResetOTP.objects.filter(user=user, otp_code=otp_code).latest('created_at')
+
+            if not otp_record.is_valid():
+                return Response({"error": "This code has expired. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({"message": "Code verified successfully."}, status=status.HTTP_200_OK)
+
+        except (User.DoesNotExist, PasswordResetOTP.DoesNotExist):
+            return Response({"error": "Incorrect verification code."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# STEP C: Finalize and Change Password
+class ConfirmPasswordResetView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        student_id = request.data.get('student_id', '').strip().upper()
+        otp_code = request.data.get('otp_code', '').strip()
+        new_password = request.data.get('new_password', '')
+
+        if len(new_password) < 8:
+            return Response({"error": "Your new password must be at least 8 characters long."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(username=student_id)
+            otp_record = PasswordResetOTP.objects.filter(user=user, otp_code=otp_code).latest('created_at')
+
+            if not otp_record.is_valid():
+                return Response({"error": "Session expired. Please start over."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Update, hash, and commit the new password to Neon DB
+            user.set_password(new_password)
+            user.save()
+            
+            # Clear the token out of database immediately after use
+            otp_record.delete()
+
+            return Response({"message": "Your password has been reset successfully!"}, status=status.HTTP_200_OK)
+
+        except (User.DoesNotExist, PasswordResetOTP.DoesNotExist):
+            return Response({"error": "Session invalid. Please request a new code."}, status=status.HTTP_400_BAD_REQUEST)
