@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
+import django.utils.timezone as timezone
+from datetime import timedelta
 
 # 1. Subjects (Fanlar) jadvali
 class Subject(models.Model):
