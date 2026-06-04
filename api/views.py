@@ -10,6 +10,7 @@ from .serializers import CustomLoginSerializer, ChangePasswordSerializer, Studen
 from rest_framework.decorators import action, api_view, permission_classes
 from django.contrib.auth.models import User
 from django.db import transaction
+import random
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
