@@ -1,21 +1,27 @@
-from rest_framework import viewsets, generics, status, permissions
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from .models import Subject, Assignment, Task, Student, Teacher, Quiz, PasswordResetOTP
-from .serializers import AssignmentSerializer, TaskSerializer
-from .serializers import StudentSerializer, RegisterStudentSerializer, SubjectSerializer, QuizSerializer
-from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomLoginSerializer, ChangePasswordSerializer, StudentProfileSettingsSerializer
-from rest_framework.decorators import action, api_view, permission_classes
-from django.contrib.auth.models import User
-from django.db import transaction
+import os
 import random
+import resend
+from datetime import timedelta
+
+from django.db import transaction
+from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
-from datetime import timedelta
-import resend
+
+from rest_framework import viewsets, generics, status, permissions
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+from .models import Subject, Assignment, Task, Student, Teacher, Quiz, PasswordResetOTP
+from .serializers import (
+    AssignmentSerializer, TaskSerializer, StudentSerializer, 
+    RegisterStudentSerializer, SubjectSerializer, QuizSerializer,
+    CustomLoginSerializer, ChangePasswordSerializer, StudentProfileSettingsSerializer
+)
 
 
 # 1. View to handle our custom 3-field login
@@ -252,14 +258,51 @@ def create_staff_teacher(request):
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# --- START RESEND API INTEGRATION ---
+
+# =========================================================
+# FORGOT PASSWORD API FLOW
+# =========================================================
+
+# STEP A: Request the 6-Digit Code
+class RequestPasswordResetOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        student_id = request.data.get('student_id', '').strip().upper()
+        
+        try:
+            user = User.objects.get(username=student_id)
+            
+            if not hasattr(user, 'student_profile'):
+                return Response({"error": "This recovery portal is for student accounts only."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # STAGE 3 SECURITY CHECK
+            if not user.student_profile.has_changed_password:
+                return Response({
+                    "error": "Your account has not been activated yet. Please use the 'First time ?' button to complete your initial login."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Generate random 6-digit string
+            otp_code = str(random.randint(100000, 999999))
+            
+            # Clean up any lingering old codes for this user
+            PasswordResetOTP.objects.filter(user=user).delete()
+            PasswordResetOTP.objects.create(user=user, otp_code=otp_code)
+            
+            # Ensure user has an email
+            target_email = user.email
+            if not target_email:
+                target_email = f"{user.username.lower()}@xmu.edu.my"
+                user.email = target_email
+                user.save()
+
+            # --- START RESEND API INTEGRATION ---
             resend.api_key = os.environ.get('RESEND_API_KEY')
             
             try:
-                # Resend testing domain (onboarding@resend.dev) only sends to the account owner
                 resend.Emails.send({
                     "from": "SAMS Portal <onboarding@resend.dev>",
-                    "to": user.email, # This will be fit2508130@xmu.edu.my
+                    "to": user.email, 
                     "subject": "SAMS Password Reset Verification Code",
                     "html": f"""
                         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
@@ -274,17 +317,19 @@ def create_staff_teacher(request):
                     """
                 })
             except Exception as e:
-                # If Resend crashes, we catch the error so the server doesn't throw a 500
                 print(f"Resend API Error: {e}")
                 return Response({
                     "error": "Failed to connect to the email server. Please try again later."
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             # --- END RESEND API INTEGRATION ---
 
-            return Response({"message": "Verification code sent to your Outlook email."}, status=status.HTTP_200_OK)
+            return Response({"message": "Verification code sent to your email."}, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response({"message": "Verification code sent to your email."}, status=status.HTTP_200_OK)
 
 
-# STEP B: Verify Only the 6-Digit Code (Unlocks the next screen on React)
+# STEP B: Verify Only the 6-Digit Code
 class VerifyPasswordResetOTPView(APIView):
     permission_classes = [permissions.AllowAny]
 
