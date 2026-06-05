@@ -1,7 +1,7 @@
 import os
 import random
-import resend
 from datetime import timedelta
+from mailjet_rest import Client
 
 from django.db import transaction
 from django.contrib.auth.models import User
@@ -296,32 +296,54 @@ class RequestPasswordResetOTPView(APIView):
                 user.email = target_email
                 user.save()
 
-            # --- START RESEND API INTEGRATION ---
-            resend.api_key = os.environ.get('RESEND_API_KEY')
-            
-            try:
-                resend.Emails.send({
-                    "from": "SAMS Portal <onboarding@resend.dev>",
-                    "to": user.email, 
-                    "subject": "SAMS Password Reset Verification Code",
-                    "html": f"""
-                        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
-                            <h2>SAMS Account Recovery</h2>
-                            <p>Hello {user.first_name},</p>
-                            <p>You requested a password reset code for the SAMS Portal.</p>
-                            <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
-                                <h1 style="color: #1e40af; margin: 0; letter-spacing: 5px;">{otp_code}</h1>
-                            </div>
-                            <p>This code will expire in 10 minutes.</p>
+            # --- START MAILJET API INTEGRATION ---
+            api_key = os.environ.get('MAILJET_API_KEY')
+            api_secret = os.environ.get('MAILJET_SECRET_KEY')
+            mailjet = Client(auth=(api_key, api_secret), version='v3.1')
+
+            data = {
+              'Messages': [
+                {
+                  "From": {
+                    "Email": "fit2508130@xmu.edu.my", # Must be the email you verified on Mailjet
+                    "Name": "SAMS Portal"
+                  },
+                  "To": [
+                    {
+                      "Email": user.email,
+                      "Name": user.first_name
+                    }
+                  ],
+                  "Subject": "SAMS Password Reset Verification Code",
+                  "HTMLPart": f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+                        <h2>SAMS Account Recovery</h2>
+                        <p>Hello {user.first_name},</p>
+                        <p>You requested a password reset code for the SAMS Portal.</p>
+                        <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                            <h1 style="color: #1e40af; margin: 0; letter-spacing: 5px;">{otp_code}</h1>
                         </div>
-                    """
-                })
+                        <p>This code will expire in 10 minutes.</p>
+                    </div>
+                  """
+                }
+              ]
+            }
+
+            try:
+                result = mailjet.send.create(data=data)
+                # Mailjet returns a 200 status code if successful
+                if result.status_code != 200:
+                    print(f"Mailjet API Error: {result.json()}")
+                    return Response({
+                        "error": "Failed to connect to the email server. Please try again later."
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             except Exception as e:
-                print(f"Resend API Error: {e}")
+                print(f"Mailjet Exception: {e}")
                 return Response({
                     "error": "Failed to connect to the email server. Please try again later."
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            # --- END RESEND API INTEGRATION ---
+            # --- END MAILJET API INTEGRATION ---
 
             return Response({"message": "Verification code sent to your email."}, status=status.HTTP_200_OK)
             
