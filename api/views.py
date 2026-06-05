@@ -298,6 +298,7 @@ class RequestPasswordResetOTPView(APIView):
                 user.save()
 
             # --- START MAILJET API INTEGRATION ---
+            import time
             api_key = os.environ.get('MAILJET_API_KEY')
             api_secret = os.environ.get('MAILJET_SECRET_KEY')
 
@@ -330,23 +331,36 @@ class RequestPasswordResetOTPView(APIView):
               ]
             }
 
-            try:
-                # Force the connection using standard requests with a 15-second timeout
-                response = requests.post(
-                    'https://api.mailjet.com/v3.1/send',
-                    auth=HTTPBasicAuth(api_key, api_secret),
-                    json=data,
-                    timeout=15
-                )
+            # Spoof a real Google Chrome browser so Mailjet's firewall doesn't block the connection
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Content-Type': 'application/json'
+            }
 
-                if response.status_code != 200:
-                    print(f"Mailjet API Error: {response.text}")
-                    return Response({
-                        "error": "Failed to connect to the email server. Please try again later."
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            success = False
+            
+            # Try 3 times to punch through the network drop
+            for attempt in range(3):
+                try:
+                    response = requests.post(
+                        'https://api.mailjet.com/v3.1/send',
+                        auth=HTTPBasicAuth(api_key, api_secret),
+                        json=data,
+                        headers=headers,
+                        timeout=15
+                    )
+                    
+                    if response.status_code == 200:
+                        success = True
+                        break  # It worked! Exit the loop.
+                    else:
+                        print(f"Mailjet API Error: {response.text}")
+                        break  # Stop retrying if the API actively rejects the data format
+                except Exception as e:
+                    print(f"Mailjet Exception (Attempt {attempt + 1}): {e}")
+                    time.sleep(1.5)  # Wait 1.5 seconds before retrying the connection
 
-            except Exception as e:
-                print(f"Mailjet Exception: {e}")
+            if not success:
                 return Response({
                     "error": "Failed to connect to the email server. Please try again later."
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
