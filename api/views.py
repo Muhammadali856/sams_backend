@@ -1,7 +1,8 @@
 import os
 import random
 from datetime import timedelta
-from mailjet_rest import Client
+import requests
+from requests.auth import HTTPBasicAuth
 
 from django.db import transaction
 from django.contrib.auth.models import User
@@ -299,13 +300,12 @@ class RequestPasswordResetOTPView(APIView):
             # --- START MAILJET API INTEGRATION ---
             api_key = os.environ.get('MAILJET_API_KEY')
             api_secret = os.environ.get('MAILJET_SECRET_KEY')
-            mailjet = Client(auth=(api_key, api_secret), version='v3.1')
 
             data = {
               'Messages': [
                 {
                   "From": {
-                    "Email": "fit2508130@xmu.edu.my", # Must be the email you verified on Mailjet
+                    "Email": "fit2508130@xmu.edu.my", 
                     "Name": "SAMS Portal"
                   },
                   "To": [
@@ -331,13 +331,20 @@ class RequestPasswordResetOTPView(APIView):
             }
 
             try:
-                result = mailjet.send.create(data=data)
-                # Mailjet returns a 200 status code if successful
-                if result.status_code != 200:
-                    print(f"Mailjet API Error: {result.json()}")
+                # Force the connection using standard requests with a 15-second timeout
+                response = requests.post(
+                    'https://api.mailjet.com/v3.1/send',
+                    auth=HTTPBasicAuth(api_key, api_secret),
+                    json=data,
+                    timeout=15
+                )
+
+                if response.status_code != 200:
+                    print(f"Mailjet API Error: {response.text}")
                     return Response({
                         "error": "Failed to connect to the email server. Please try again later."
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             except Exception as e:
                 print(f"Mailjet Exception: {e}")
                 return Response({
