@@ -305,7 +305,7 @@ class RequestPasswordResetOTPView(APIView):
             api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
             
             # This MUST exactly match the email you verified inside Brevo
-            sender = {"name": "SAMS Portal", "email": "fit2508130@xmu.edu.my"}
+            sender = {"name": "SAMS Portal", "email": "eshboevmuhammadali2@gmail.com"}
             to = [{"email": user.email, "name": user.first_name}]
             
             html_content = f"""
