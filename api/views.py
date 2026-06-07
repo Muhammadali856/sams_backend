@@ -24,6 +24,9 @@ from .serializers import (
     CustomLoginSerializer, ChangePasswordSerializer, StudentProfileSettingsSerializer
 )
 
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
+
 
 # 1. View to handle our custom 3-field login
 class CustomLoginView(TokenObtainPairView):
@@ -297,74 +300,43 @@ class RequestPasswordResetOTPView(APIView):
                 user.email = target_email
                 user.save()
 
-            # --- START MAILJET API INTEGRATION ---
-            import time
-            api_key = os.environ.get('MAILJET_API_KEY')
-            api_secret = os.environ.get('MAILJET_SECRET_KEY')
+            # --- START BREVO API INTEGRATION ---
+            configuration = sib_api_v3_sdk.Configuration()
+            configuration.api_key['api-key'] = os.environ.get('BREVO_API_KEY')
 
-            data = {
-              'Messages': [
-                {
-                  "From": {
-                    "Email": "fit2508130@xmu.edu.my", 
-                    "Name": "SAMS Portal"
-                  },
-                  "To": [
-                    {
-                      "Email": user.email,
-                      "Name": user.first_name
-                    }
-                  ],
-                  "Subject": "SAMS Password Reset Verification Code",
-                  "HTMLPart": f"""
-                    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
-                        <h2>SAMS Account Recovery</h2>
-                        <p>Hello {user.first_name},</p>
-                        <p>You requested a password reset code for the SAMS Portal.</p>
-                        <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
-                            <h1 style="color: #1e40af; margin: 0; letter-spacing: 5px;">{otp_code}</h1>
-                        </div>
-                        <p>This code will expire in 10 minutes.</p>
-                    </div>
-                  """
-                }
-              ]
-            }
-
-            # Spoof a real Google Chrome browser so Mailjet's firewall doesn't block the connection
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Content-Type': 'application/json'
-            }
-
-            success = False
+            api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
             
-            # Try 3 times to punch through the network drop
-            for attempt in range(3):
-                try:
-                    response = requests.post(
-                        'https://api.mailjet.com/v3.1/send',
-                        auth=HTTPBasicAuth(api_key, api_secret),
-                        json=data,
-                        headers=headers,
-                        timeout=15
-                    )
-                    
-                    if response.status_code == 200:
-                        success = True
-                        break  # It worked! Exit the loop.
-                    else:
-                        print(f"Mailjet API Error: {response.text}")
-                        break  # Stop retrying if the API actively rejects the data format
-                except Exception as e:
-                    print(f"Mailjet Exception (Attempt {attempt + 1}): {e}")
-                    time.sleep(1.5)  # Wait 1.5 seconds before retrying the connection
+            # This MUST exactly match the email you verified inside Brevo
+            sender = {"name": "SAMS Portal", "email": "fit2508130@xmu.edu.my"}
+            to = [{"email": user.email, "name": user.first_name}]
+            
+            html_content = f"""
+                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+                    <h2>SAMS Account Recovery</h2>
+                    <p>Hello {user.first_name},</p>
+                    <p>You requested a password reset code for the SAMS Portal.</p>
+                    <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                        <h1 style="color: #1e40af; margin: 0; letter-spacing: 5px;">{otp_code}</h1>
+                    </div>
+                    <p>This code will expire in 10 minutes.</p>
+                </div>
+            """
+            
+            send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+                to=to,
+                html_content=html_content,
+                sender=sender,
+                subject="SAMS Password Reset Verification Code"
+            )
 
-            if not success:
+            try:
+                api_instance.send_transac_email(send_smtp_email)
+            except ApiException as e:
+                print(f"Brevo API Error: {e}")
                 return Response({
                     "error": "Failed to connect to the email server. Please try again later."
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            # --- END MAILJET API INTEGRATION ---
+            # --- END BREVO API INTEGRATION ---
 
             return Response({"message": "Verification code sent to your email."}, status=status.HTTP_200_OK)
             
