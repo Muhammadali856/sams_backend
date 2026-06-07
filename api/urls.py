@@ -28,5 +28,5 @@ urlpatterns = [
     path('auth/forgot-password/request/', RequestPasswordResetOTPView.as_view(), name='fp-request'),
     path('auth/forgot-password/verify/', VerifyPasswordResetOTPView.as_view(), name='fp-verify'),
     path('auth/forgot-password/confirm/', ConfirmPasswordResetView.as_view(), name='fp-confirm'),
-    path('api/cron/send-reminders/', TriggerDeadlineEmailsView.as_view(), name='cron-send-reminders'),
+    path('cron/send-reminders/', TriggerDeadlineEmailsView.as_view(), name='cron-send-reminders'),
 ]
