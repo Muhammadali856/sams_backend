@@ -81,3 +81,16 @@ class PasswordResetOTP(models.Model):
     def is_valid(self):
         # The OTP code expires automatically after 10 minutes
         return self.created_at >= timezone.now() - timedelta(minutes=10)
+
+class EmailNotificationLog(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='email_logs')
+    item_type = models.CharField(max_length=20) # 'assignment' or 'quiz'
+    item_id = models.IntegerField()
+    milestone = models.IntegerField() # 7, 3, or 1
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('student', 'item_type', 'item_id', 'milestone')
+
+    def __str__(self):
+        return f"{self.student.user.username} - {self.item_type} {self.item_id} ({self.milestone} days)"

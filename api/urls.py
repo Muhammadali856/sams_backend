@@ -7,6 +7,7 @@ from . import views
 from .views import CustomLoginView, ChangePasswordView, StudentProfileSettingsView
 from .views import RequestPasswordResetOTPView, VerifyPasswordResetOTPView, ConfirmPasswordResetView
 from rest_framework_simplejwt.views import TokenRefreshView
+from .views import TriggerDeadlineEmailsView
 
 router = DefaultRouter()
 
@@ -27,4 +28,5 @@ urlpatterns = [
     path('auth/forgot-password/request/', RequestPasswordResetOTPView.as_view(), name='fp-request'),
     path('auth/forgot-password/verify/', VerifyPasswordResetOTPView.as_view(), name='fp-verify'),
     path('auth/forgot-password/confirm/', ConfirmPasswordResetView.as_view(), name='fp-confirm'),
+    path('api/cron/send-reminders/', TriggerDeadlineEmailsView.as_view(), name='cron-send-reminders'),
 ]

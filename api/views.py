@@ -24,6 +24,9 @@ from .serializers import (
 
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
+from datetime import timedelta
+from django.utils import timezone
+from .models import EmailNotificationLog
 
 
 # 1. View to handle our custom 3-field login
@@ -393,3 +396,109 @@ class ConfirmPasswordResetView(APIView):
 
         except (User.DoesNotExist, PasswordResetOTP.DoesNotExist):
             return Response({"error": "Session invalid. Please request a new code."}, status=status.HTTP_400_BAD_REQUEST)
+
+class TriggerDeadlineEmailsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        # SECURITY: Ensure only your cron job can trigger this
+        secret = request.headers.get('X-Cron-Secret')
+        if secret != os.environ.get('CRON_SECRET_KEY'):
+            return Response({"error": "Unauthorized endpoint access."}, status=status.HTTP_403_FORBIDDEN)
+
+        today = timezone.localtime(timezone.now()).date()
+        milestones = [7, 3, 1]
+        
+        # Only target active students who have passed the first-time login
+        students = Student.objects.filter(is_active=True, has_changed_password=True)
+        emails_sent = 0
+
+        for student in students:
+            student_subjects = student.subjects.all()
+            bundled_deadlines = []
+
+            for m in milestones:
+                target_date = today + timedelta(days=m)
+                
+                # Check Assignments
+                assignments = Assignment.objects.filter(subject__in=student_subjects, deadline__date=target_date)
+                for a in assignments:
+                    if not EmailNotificationLog.objects.filter(student=student, item_type='assignment', item_id=a.id, milestone=m).exists():
+                        bundled_deadlines.append({'type': 'Assignment', 'item': a, 'milestone': m})
+                
+                # Check Quizzes
+                quizzes = Quiz.objects.filter(subject__in=student_subjects, deadline__date=target_date)
+                for q in quizzes:
+                    if not EmailNotificationLog.objects.filter(student=student, item_type='quiz', item_id=q.id, milestone=m).exists():
+                        bundled_deadlines.append({'type': 'Quiz', 'item': q, 'milestone': m})
+
+            if bundled_deadlines:
+                # Build highly visible HTML email
+                html_items = ""
+                for b in bundled_deadlines:
+                    item = b['item']
+                    subject_name = item.subject.name
+                    formatted_time = timezone.localtime(item.deadline).strftime('%d %b %Y, %I:%M %p')
+                    
+                    html_items += f"""
+                    <div style="background-color: #f8fafc; border-left: 6px solid #3b82f6; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                        <h2 style="margin: 0 0 8px 0; color: #1e40af; font-size: 26px; font-weight: 900; text-transform: uppercase;">
+                            {subject_name}
+                        </h2>
+                        <h3 style="margin: 0 0 10px 0; color: #0f172a; font-size: 20px;">
+                            {b['type']}: {item.name}
+                        </h3>
+                        <p style="margin: 0; color: #ef4444; font-weight: 900; font-size: 18px;">
+                            🚨 DUE IN {b['milestone']} DAY{'S' if b['milestone'] > 1 else ''}!
+                        </p>
+                        <p style="margin: 8px 0 0 0; color: #475569; font-size: 15px;">
+                            Exact Deadline: <strong>{formatted_time}</strong>
+                        </p>
+                    </div>
+                    """
+
+                html_content = f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                        <h1 style="color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">Action Required: Upcoming Deadlines</h1>
+                        <p style="font-size: 16px; color: #334155;">Hello {student.user.first_name},</p>
+                        <p style="font-size: 16px; color: #334155;">Here is your deadline summary. Please manage your time accordingly.</p>
+                        <div style="margin-top: 30px;">
+                            {html_items}
+                        </div>
+                        <p style="font-size: 14px; color: #94a3b8; margin-top: 30px; text-align: center;">
+                            Log in to the SAMS Portal to submit your work.
+                        </p>
+                    </div>
+                """
+                
+                # Send via Brevo
+                configuration = sib_api_v3_sdk.Configuration()
+                configuration.api_key['api-key'] = os.environ.get('BREVO_API_KEY')
+                api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+                
+                sender = {"name": "SAMS Portal", "email": "eshboevmuhammadali2@gmail.com"}
+                to = [{"email": student.user.email, "name": student.user.first_name}]
+                
+                send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+                    to=to,
+                    html_content=html_content,
+                    sender=sender,
+                    subject=f"SAMS Alert: {len(bundled_deadlines)} Upcoming Deadline{'s' if len(bundled_deadlines) > 1 else ''}"
+                )
+                
+                try:
+                    api_instance.send_transac_email(send_smtp_email)
+                    
+                    # Create logs
+                    for b in bundled_deadlines:
+                        EmailNotificationLog.objects.create(
+                            student=student,
+                            item_type=b['type'].lower(),
+                            item_id=b['item'].id,
+                            milestone=b['milestone']
+                        )
+                    emails_sent += 1
+                except Exception as e:
+                    print(f"Failed to send to {student.user.email}: {e}")
+        
+        return Response({"message": f"Processed successfully. Sent {emails_sent} emails."}, status=status.HTTP_200_OK)
