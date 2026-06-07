@@ -1,8 +1,6 @@
 import os
 import random
 from datetime import timedelta
-import requests
-from requests.auth import HTTPBasicAuth
 
 from django.db import transaction
 from django.contrib.auth.models import User
