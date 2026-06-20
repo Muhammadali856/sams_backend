@@ -5,100 +5,73 @@ from .models import Subject, Teacher, Student, Assignment, Task, Quiz
 from rest_framework import serializers
 
 # 1. Custom Login Serializer
+# 1. Custom Unified Login Serializer
 class CustomLoginSerializer(TokenObtainPairSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Make all identity fields optional so DRF doesn't block the request early
-        self.fields['username'] = serializers.CharField(required=False)
-        self.fields['student_id'] = serializers.CharField(required=False)
+        # Single identifier field for both students and teachers
+        self.fields['identifier'] = serializers.CharField(required=True)
         self.fields['full_name'] = serializers.CharField(required=False)
 
     def validate(self, attrs):
+        identifier = attrs.get('identifier', '').strip()
         password = attrs.get('password')
         
-        # ==========================================
-        # FLOW 1: TEACHER LOGIN
-        # ==========================================
-        if 'username' in attrs and attrs['username'].strip():
-            username = attrs.get('username')
-            try:
-                user = User.objects.get(username=username)
-            except User.DoesNotExist:
-                raise serializers.ValidationError({"detail": "Invalid username or password."})
+        # 1. Find User by ID/Username (Case Insensitive)
+        try:
+            user = User.objects.get(username__iexact=identifier)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"detail": "Invalid ID or password."})
+
+        # 2. Verify Password
+        if not user.check_password(password):
+            raise serializers.ValidationError({"detail": "Incorrect password."})
             
-            if not user.check_password(password):
-                raise serializers.ValidationError({"detail": "Incorrect password."})
-                
-            if not hasattr(user, 'teacher'):
-                raise serializers.ValidationError({"detail": "This account is not a teacher account."})
+        # 3. Determine Role
+        is_student = hasattr(user, 'student_profile')
+        is_teacher = hasattr(user, 'teacher')
 
-        # ==========================================
-        # FLOW 2: STUDENT LOGIN
-        # ==========================================
-        elif 'student_id' in attrs:
-            student_id = attrs.get('student_id', '').strip().upper()
+        if not is_student and not is_teacher:
+            raise serializers.ValidationError({"detail": "This account has no valid role configured."})
 
-            # 1. Find user by Student ID
-            try:
-                user = User.objects.get(username=student_id)
-            except User.DoesNotExist:
-                raise serializers.ValidationError({"detail": "Invalid Student ID or password."})
+        # 4. FIRST TIME LOGIN CHECK (Students Only)
+        if is_student and not user.student_profile.has_changed_password:
+            if 'full_name' not in attrs or not attrs['full_name'].strip():
+                raise serializers.ValidationError({
+                    "detail": "First time logging in? Please verify your Full Name.",
+                    "first_time_required": True 
+                })
+            
+            raw_full_name = attrs.get('full_name', '')
+            submitted_name = " ".join(raw_full_name.split()).upper()
+            raw_db_name = f"{user.first_name} {user.last_name}"
+            db_name = " ".join(raw_db_name.split()).upper()
 
-            # 2. Check Password
-            if not user.check_password(password):
-                raise serializers.ValidationError({"detail": "Incorrect password."})
-                
-            # 3. Ensure this is actually a student
-            if not hasattr(user, 'student_profile'):
-                raise serializers.ValidationError({"detail": "This account is not a student account."})
+            if submitted_name != db_name:
+                raise serializers.ValidationError({"detail": "Identity verification failed. Name does not match."})
 
-            # 4. FIRST TIME LOGIN CHECK: Require Full Name if default password hasn't been changed
-            if not user.student_profile.has_changed_password:
-                if 'full_name' not in attrs or not attrs['full_name'].strip():
-                    raise serializers.ValidationError({
-                        "detail": "This is your first time logging in. Please click 'First time logging in?' to verify your full name.",
-                        "first_time_required": True 
-                    })
-                
-                # Verify the provided Full Name matches the database
-                raw_full_name = attrs.get('full_name', '')
-                submitted_name = " ".join(raw_full_name.split()).upper()
-                raw_db_name = f"{user.first_name} {user.last_name}"
-                db_name = " ".join(raw_db_name.split()).upper()
-
-                if submitted_name != db_name:
-                    raise serializers.ValidationError({"detail": "Invalid Student ID or Full Name."})
-
-        # ==========================================
-        # FLOW 3: INVALID PAYLOAD
-        # ==========================================
-        else:
-            raise serializers.ValidationError({
-                "detail": "Must provide either teacher username or student credentials."
-            })
-
-        # ==========================================
-        # GENERATE TOKENS AND RESPONSE DATA
-        # ==========================================
+        # 5. Generate Tokens
         refresh = self.get_token(user)
         data = {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-            'user_id': user.student_profile.id if hasattr(user, 'student_profile') else user.teacher.id,
             'username': user.username,
         }
 
-        if hasattr(user, 'student_profile'):
+        # 6. Append Role-Specific Data
+        if is_student:
             data['role'] = 'student'
+            data['user_id'] = user.student_profile.id
+            data['studentId'] = user.username # Ensure frontend gets the ID back
             data['require_password_change'] = not user.student_profile.has_changed_password
-        elif hasattr(user, 'teacher'):
+        elif is_teacher:
             data['role'] = 'teacher'
+            data['user_id'] = user.teacher.id
             data['require_password_change'] = False
             data['is_head_teacher'] = user.teacher.is_head_teacher
 
-        return data  # <--- THIS is the crucial line that was missing!
-
+        return data
 
 # 2. Password Change Serializer
 class ChangePasswordSerializer(serializers.Serializer):
