@@ -10,7 +10,10 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Single identifier field for both students and teachers
+        # Prevent DRF from blocking the request when looking for the default 'username'
+        self.fields['username'] = serializers.CharField(required=False)
+        
+        # Our custom unified fields
         self.fields['identifier'] = serializers.CharField(required=True)
         self.fields['full_name'] = serializers.CharField(required=False)
 
@@ -63,7 +66,7 @@ class CustomLoginSerializer(TokenObtainPairSerializer):
         if is_student:
             data['role'] = 'student'
             data['user_id'] = user.student_profile.id
-            data['studentId'] = user.username # Ensure frontend gets the ID back
+            data['studentId'] = user.username 
             data['require_password_change'] = not user.student_profile.has_changed_password
         elif is_teacher:
             data['role'] = 'teacher'
