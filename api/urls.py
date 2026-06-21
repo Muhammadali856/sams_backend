@@ -4,7 +4,7 @@ from .views import AssignmentViewSet, TaskViewSet
 from .views import UpdateStudentSubjectsView, SubjectViewSet, StudentViewSet, QuizViewSet
 from . import views
 
-from .views import CustomLoginView, ChangePasswordView, StudentProfileSettingsView
+from .views import CustomLoginView, ChangePasswordView, StudentProfileSettingsView, create_student_account
 from .views import RequestPasswordResetOTPView, VerifyPasswordResetOTPView, ConfirmPasswordResetView
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import TriggerDeadlineEmailsView
@@ -29,4 +29,5 @@ urlpatterns = [
     path('auth/forgot-password/verify/', VerifyPasswordResetOTPView.as_view(), name='fp-verify'),
     path('auth/forgot-password/confirm/', ConfirmPasswordResetView.as_view(), name='fp-confirm'),
     path('cron/send-reminders/', TriggerDeadlineEmailsView.as_view(), name='cron-send-reminders'),
+    path('students/create/', create_student_account, name='create-student'),
 ]

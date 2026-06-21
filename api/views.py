@@ -135,10 +135,46 @@ class SubjectViewSet(viewsets.ModelViewSet):
         student.subjects.add(subject)
         return Response({"message": f"Successfully enrolled in {subject.name}!"}, status=status.HTTP_200_OK)
 
-class StudentViewSet(viewsets.ReadOnlyModelViewSet):
+class StudentViewSet(viewsets.ModelViewSet):  
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
+
+    def destroy(self, request, *args, **kwargs):
+        # SECURITY WALL
+        if not hasattr(request.user, 'teacher') or not request.user.teacher.is_head_teacher:
+            return Response({"error": "Access Denied. Only Head Teachers can delete students."}, status=status.HTTP_403_FORBIDDEN)
+        
+        student = self.get_object()
+        user = student.user
+        student.delete()
+        user.delete() # Completely wipes the user from the database
+        return Response({"message": "Student deleted successfully."}, status=status.HTTP_200_OK)
+
+    def update(self, request, *args, **kwargs):
+        # SECURITY WALL
+        if not hasattr(request.user, 'teacher') or not request.user.teacher.is_head_teacher:
+            return Response({"error": "Access Denied. Only Head Teachers can edit students."}, status=status.HTTP_403_FORBIDDEN)
+        
+        student = self.get_object()
+        user = student.user
+        data = request.data
+
+        # Update core User fields
+        if 'first_name' in data: user.first_name = data['first_name']
+        if 'last_name' in data: user.last_name = data['last_name']
+        if 'email' in data: user.email = data['email']
+        if 'username' in data: user.username = data['username'] # Campus ID
+
+        # If Head Teacher resets the password, force the student to change it again upon next login
+        if 'password' in data and data['password']: 
+            user.set_password(data['password'])
+            student.has_changed_password = False 
+            
+        user.save()
+        student.save()
+
+        return Response(StudentSerializer(student).data, status=status.HTTP_200_OK)
 
 class UpdateStudentSubjectsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -502,3 +538,41 @@ class TriggerDeadlineEmailsView(APIView):
                     print(f"Failed to send to {student.user.email}: {e}")
         
         return Response({"message": f"Processed successfully. Sent {emails_sent} emails."}, status=status.HTTP_200_OK)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_student_account(request):
+    user = request.user
+
+    # SECURITY WALL: Only Head Teachers
+    if not hasattr(user, 'teacher') or not user.teacher.is_head_teacher:
+        return Response({"error": "Access Denied. Only Head Teachers can create students."}, status=status.HTTP_403_FORBIDDEN)
+
+    data = request.data
+    username = data.get('username') # This is the Campus ID
+    password = data.get('password')
+    first_name = data.get('first_name', '')
+    last_name = data.get('last_name', '')
+    email = data.get('email', '')
+
+    if not username or not password:
+        return Response({"error": "Campus ID and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(username__iexact=username).exists():
+        return Response({"error": "That Campus ID is already taken."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        with transaction.atomic():
+            new_user = User.objects.create_user(
+                username=username,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+                email=email
+            )
+            # Create the linked student profile (forces them to change password on first login)
+            Student.objects.create(user=new_user, has_changed_password=False)
+            
+        return Response({"message": f"Successfully created student account for {first_name} {last_name}!"}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
