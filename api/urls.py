@@ -18,6 +18,8 @@ router.register(r'students', StudentViewSet, basename='student')
 router.register(r'quizzes', QuizViewSet, basename='quiz')
 
 urlpatterns = [
+    
+    path('students/create/', create_student_account, name='create-student'),
     path('', include(router.urls)),
     
     path('auth/login/', CustomLoginView.as_view(), name='custom_login'), 
